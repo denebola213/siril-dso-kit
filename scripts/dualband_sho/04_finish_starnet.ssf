@@ -1,0 +1,49 @@
+requires 1.5.0
+# シーケンスの FITS 拡張子（StarNet.py の出力も .fits）。
+setext fits
+# ============================================================================
+# 04: 線形 SHO → StarNet2（線形）→ 星無し/星を別々にストレッチ → スクリーン合成
+#   実行:  siril-cli -d <SHO_linear.fits があるディレクトリ> -s 04_finish_starnet.ssf
+#   前提:  03_merge_compose.ssf で SHO_linear.fits ができていること
+#   出力:  SHO_starless / SHO_nebula / SHO_stars / SHO_final
+# ----------------------------------------------------------------------------
+# StarNet.py（2026 版）の挙動：
+#   - 星無しは「現在の画像」バッファに返る（ファイルには落ちない）→ 自分で save する
+#   - 星レイヤーだけが descreen_mask_image.fits として保存される（名前は "image" 固定）
+#   - starnet2 が PATH か /usr/bin にあれば自動で見つける。CUDA 無しでも CPU で動く
+#   - 512px 未満の画像は StarNet が処理できず status 255 で落ちる。しかも失敗しても
+#     save は通るので、星を抜いていない画像が SHO_starless として残る。ログに
+#     "StarNet exited with status 255" が無いことを確認すること
+# ============================================================================
+
+# --- 1) StarNet2 を線形のまま -------------------------------------------------
+# StarNet は「合成後の1枚」にだけかける。チャンネル毎にかけると星の縁が色ずれする。
+# --linear   : 線形データとして扱う（スクリプト内部で仮ストレッチ→戻す）
+# --masks descreen : スクリーン合成で元に戻せる星レイヤーも出す
+load SHO_linear
+pyscript StarNet.py --linear --masks descreen
+save SHO_starless
+
+# --- 2) 星無し（星雲）をストレッチ -------------------------------------------
+# -linked 必須。targetbg は 0.10-0.20。淡い対象はこの後に ght を1回足す。
+load SHO_starless
+autostretch -linked -2.8 0.15
+save SHO_nebula
+
+# --- 3) 星レイヤーを別ストレッチ ---------------------------------------------
+# 星は星雲より弱く伸ばす。同じだけ伸ばすと芯が白飛びして団子になる。
+load descreen_mask_image
+autostretch -linked -2.8 0.08
+# ナローバンド由来の星は R=SII/G=Ha/B=OIII で緑や赤に転ぶので灰色化して白色星にする。
+# 広帯域 RGB の星レイヤーを使う場合はこの行を消す。
+satu -1 1
+save SHO_stars
+
+# --- 4) スクリーン合成 -------------------------------------------------------
+# screen = A + B - A*B。descreen レイヤーとはこれで元画像に戻る関係。
+# pm の結果は「現在の画像」に入る（-out= は無い）。pm は $名前$ で作業ディレクトリの
+# 画像を参照する。星が強すぎる場合は pm の前に SHO_stars を fmul 0.7-0.9 しておく
+# （2026-11 の NGC 6992 では星が少し硬すぎたので、次は 0.8 程度を試す）。
+load SHO_nebula
+pm "$SHO_nebula$ + $SHO_stars$ - $SHO_nebula$ * $SHO_stars$"
+save SHO_final

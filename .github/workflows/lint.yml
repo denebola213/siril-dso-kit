@@ -1,0 +1,41 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash 構文チェック
+        run: |
+          set -e
+          find scripts -name '*.sh' -print0 | while IFS= read -r -d '' f; do
+            echo "== $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          find scripts -name '*.sh' -print0 | xargs -0 shellcheck --severity=error
+
+      - name: Python 構文チェック
+        run: |
+          set -e
+          find scripts -name '*.py' -print0 | while IFS= read -r -d '' f; do
+            echo "== $f"
+            python3 -m py_compile "$f"
+          done
+
+      - name: .ssf の先頭が requires であること
+        run: |
+          set -e
+          find scripts -name '*.ssf' -print0 | while IFS= read -r -d '' f; do
+            head -n1 "$f" | grep -q '^requires ' || { echo "NG: $f"; exit 1; }
+            grep -q '^setext ' "$f" || { echo "NG (setext なし): $f"; exit 1; }
+          done
+          echo "OK"

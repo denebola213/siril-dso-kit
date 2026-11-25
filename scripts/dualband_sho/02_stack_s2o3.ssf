@@ -1,0 +1,33 @@
+requires 1.5.0
+# シーケンスの FITS 拡張子（既定は .fit。Ekos の .fits を扱うため明示する）。
+setext fits
+# ============================================================================
+# 02: SII+OIII フィルタ  較正 → debayer → 整列（Ha+OIII を基準）→ スタック → 分離
+#   実行:  siril-cli -d <S2O3の作業ディレクトリ> -s /path/to/02_stack_s2o3.ssf
+#   01 と違うのは 3 か所だけ: -extref / 出力名 / 保存名
+# ============================================================================
+
+calibrate light -debayer
+
+# --- 整列（Ha+OIII のスタックを基準に合わせる）--------------------------------
+# OIII を2本のフィルタから平均するので、2つのスタックは同一ピクセル格子でなければ
+# ならない。-extref は「登録変換を外部参照画像に合成する」オプション（Siril 1.5）。
+# 絶対パス・拡張子込みで書く（setext はここには効かない）。
+register pp_light -extref=/path/work/HaO3/HaO3_color.fits
+seqapplyreg pp_light
+stack r_pp_light rej 3 3 -norm=addscale -out=S2O3_color
+
+# --- 分離 ---------------------------------------------------------------------
+# SII(672nm) も Hα(656nm) と同じく R 画素に入るので、取り出し方は 01 と同じ。
+# SII = R、OIII = (G + B) / 2。
+load S2O3_color
+split SII G_s2 B_s2
+
+load G_s2
+fmul 0.500
+save _oiii_s2_g
+
+load B_s2
+fmul 0.500
+iadd _oiii_s2_g
+save OIII_s2

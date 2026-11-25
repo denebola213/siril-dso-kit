@@ -1,0 +1,43 @@
+requires 1.5.0
+# シーケンスの FITS 拡張子。未設定だと Siril の既定は .fit で、Ekos が書く .fits を
+# 拾えず「No sequence found ... (current is .fit)」で calibrate が落ちる。
+# この行は load/save の拡張子も切り替えるので、後段の load も .fits 前提になる。
+setext fits
+# ============================================================================
+# 01: Ha+OIII フィルタ  較正 → debayer → 整列 → スタック → Ha/OIII 取り出し
+#   実行:  siril-cli -d <作業ディレクトリ> -s /path/to/01_stack_hao3.ssf
+#   前提:  作業ディレクトリに light_0001.fits, light_0002.fits ... が並んでいる
+#          （Ekos のファイル名のままなら link_lights.sh で light_0001.fits にリンクする）
+# ----------------------------------------------------------------------------
+# CFA を保つ経路（calibrate -cfa + extract_HaOIII）は Siril 1.5 の CLI では成立しない。
+# seqapplyreg と stack が二段で補間し、モザイクの 2x2 コントラストが 70% -> 34% -> 19%
+# に落ちるのを実測（stacking.c にもベイヤー処理が無い）。よって debayer して取り出す。
+# ============================================================================
+
+# --- 較正 -------------------------------------------------------------------
+# フラット・ダークがある夜は -flat= / -dark= を足す（-cc=dark 3 3 は -dark が必須）。
+# ダークは露出・温度・offset がライトと一致するものだけ。無ければこの行は
+# -debayer だけで通る（周辺減光とホットピクセルは残る）。
+calibrate light -debayer
+
+# --- 整列とスタック ----------------------------------------------------------
+# カラー画像になったので seqapplyreg の補間は問題ない。register だけでは r_ 画像は
+# 作られない（1.5 の仕様）ので、seqapplyreg を挟む。
+# 10枚未満なら rej 3 3 は失敗する → med に落とす（README参照）
+register pp_light
+seqapplyreg pp_light
+stack r_pp_light rej 3 3 -norm=addscale -out=HaO3_color
+
+# --- Ha / OIII の取り出し -----------------------------------------------------
+# split <R名> <G名> <B名> は 3 つの出力名を取る。Ha = R、OIII = (G + B) / 2。
+load HaO3_color
+split Ha G_ha B_ha
+
+load G_ha
+fmul 0.500
+save _oiii_g
+
+load B_ha
+fmul 0.500
+iadd _oiii_g
+save OIII_ha

@@ -1,0 +1,29 @@
+# 画像・スタック・Siril のシーケンスメタデータはコミットしない
+*.fit
+*.fits
+*.fts
+*.seq
+*.tif
+*.tiff
+*.png
+*.jpg
+!docs/**/*.png
+
+# GraXpert / StarNet の出力
+bge.fits
+dn.fits
+descreen_mask_*.fits
+starnetmask_*.fits
+starless_*.fits
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+.DS_Store

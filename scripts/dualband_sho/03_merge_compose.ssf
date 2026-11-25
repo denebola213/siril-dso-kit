@@ -1,0 +1,45 @@
+requires 1.5.0
+# シーケンスの FITS 拡張子（GraXpert の出力も .fits）。
+setext fits
+# ============================================================================
+# 03: OIII の統合 → SHO 合成（すべて線形のまま）
+#   実行:  siril-cli -d <チャンネル作業ディレクトリ> -s 03_merge_compose.ssf
+#   前提:  Ha_gx.fits / OIII_ha_gx.fits / SII_gx.fits / OIII_s2_gx.fits
+#          （GraXpert BGE とデノイズを済ませた4枚。BGE は合成前にチャンネル毎）
+# ----------------------------------------------------------------------------
+# チャンネルごとに背景レベルが違う（実測例: SII 90 / Ha 102 / OIII 182）。
+# 揃えずに合成すると、最も背景の高いチャンネルへ全体が転ぶ（実例では OIII が高く
+# SHO が真っ青になった）。窓は背景だけを拾う 0.0-0.01（16bit で 0-655 ADU）。
+# 重みを掛けると背景も一緒に持ち上がるので、ここでは掛けない。
+# ============================================================================
+
+# --- OIII を2本のフィルタから1枚に統合 ----------------------------------------
+# フィルタの透過率・帯域が違うので、先に SIIOIII 側を HaOIII 側の背景レベルへ
+# 線形マッチさせる。
+load OIII_s2_gx
+linear_match OIII_ha_gx 0.0 0.01
+
+# 露出が等しいなら 0.5 / 0.5。露出比が違うなら t/(t1+t2) を入れる。
+fmul 0.500
+save _oiii_s2_w
+
+load OIII_ha_gx
+fmul 0.500
+iadd _oiii_s2_w
+save OIII
+
+# --- SHO 合成（R=SII, G=Ha, B=OIII）-------------------------------------------
+# 背景を Ha に揃えてから合成する。線形で決めておけば、あとの autostretch -linked が
+# 比を保つのでストレッチ後にいじる必要がない。
+load SII_gx
+linear_match Ha_gx 0.0 0.01
+save _r
+
+load Ha_gx
+save _g
+
+load OIII
+linear_match Ha_gx 0.0 0.01
+save _b
+
+rgbcomp _r _g _b -out=SHO_linear
